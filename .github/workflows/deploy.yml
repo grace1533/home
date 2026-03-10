@@ -1,17 +1,18 @@
 name: Deploy to PinMe
 
 on:
+  # Automatic trigger on specific file changes
   push:
     branches:
       - main
       - master
     paths:
-      - 'src/**'
-      - 'package.json'
-      - 'package-lock.json'  # 确保 lock 文件变化也触发
-      - 'vite.config.ts'
-      - 'pinme.config.yml'   # 建议改为与工具相关的配置文件名
+      - 'src/**'           # Source code changes
+      - 'package.json'     # Dependency changes
+      - 'vite.config.ts'   # Build configuration changes
+      - 'build/deploy_gke.yml'  # Deployment configuration
   
+  # Manual trigger option
   workflow_dispatch:
     inputs:
       domain:
@@ -36,13 +37,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
+          cache: 'npm'  # or 'pnpm'/'yarn'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci  # or 'pnpm install'/'yarn install'
 
       - name: Build project
-        run: npm run build
+        run: npm run build  # Adjust to your build command
 
       - name: Install PinMe CLI
         run: npm install -g pinme
@@ -50,22 +51,17 @@ jobs:
       - name: Deploy to PinMe
         env:
           PINME_APPKEY: ${{ secrets.PINME_APPKEY }}
-          # 将输入参数转换为环境变量，方便在脚本中使用
-          INPUT_DOMAIN: ${{ github.event.inputs.domain }}
-          INPUT_BUILD_DIR: ${{ github.event.inputs.build_dir || 'dist' }}
         run: |
-          # 配置 AppKey
+          # Set up PinMe authentication
           pinme set-appkey "$PINME_APPKEY"
           
-          # 确定域名
-          if [ -n "$INPUT_DOMAIN" ]; then
-            DOMAIN="$INPUT_DOMAIN"
+          # Deploy with custom or default domain
+          if [ -n "${{ github.event.inputs.domain }}" ]; then
+            DOMAIN="${{ github.event.inputs.domain }}"
           else
-            # 自动生成：owner-repo
+            # Auto-generate domain from repository name
             DOMAIN=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]' | tr '/' '-')
           fi
           
-          echo "Deploying directory: $INPUT_BUILD_DIR to domain: $DOMAIN"
-          
-          # 执行部署 (使用动态构建目录)
-          pinme upload "$INPUT_BUILD_DIR" --domain "$DOMAIN"
+          # Upload build directory
+          pinme upload "dist" --domain "$DOMAIN"
