@@ -1,0 +1,71 @@
+name: Deploy to PinMe
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'src/**'
+      - 'package.json'
+      - 'package-lock.json'  # 确保 lock 文件变化也触发
+      - 'vite.config.ts'
+      - 'pinme.config.yml'   # 建议改为与工具相关的配置文件名
+  
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: 'Custom domain name (optional)'
+        required: false
+        type: string
+      build_dir:
+        description: 'Build directory (default: dist)'
+        required: false
+        default: 'dist'
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Install PinMe CLI
+        run: npm install -g pinme
+
+      - name: Deploy to PinMe
+        env:
+          PINME_APPKEY: ${{ secrets.PINME_APPKEY }}
+          # 将输入参数转换为环境变量，方便在脚本中使用
+          INPUT_DOMAIN: ${{ github.event.inputs.domain }}
+          INPUT_BUILD_DIR: ${{ github.event.inputs.build_dir || 'dist' }}
+        run: |
+          # 配置 AppKey
+          pinme set-appkey "$PINME_APPKEY"
+          
+          # 确定域名
+          if [ -n "$INPUT_DOMAIN" ]; then
+            DOMAIN="$INPUT_DOMAIN"
+          else
+            # 自动生成：owner-repo
+            DOMAIN=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]' | tr '/' '-')
+          fi
+          
+          echo "Deploying directory: $INPUT_BUILD_DIR to domain: $DOMAIN"
+          
+          # 执行部署 (使用动态构建目录)
+          pinme upload "$INPUT_BUILD_DIR" --domain "$DOMAIN"
